@@ -131,10 +131,10 @@ demo()
 <p>⭐ Mac OS and Windows 10 and above users can go to <a href="https://github.com/JoeanAmier/TikTokDownloader/releases/latest">Releases</a> or <a href="https://github.com/JoeanAmier/TikTokDownloader/actions">Actions</a> to download the compiled program, ready to use!</p>
 <p>⭐ This project includes GitHub Actions for automatic building executable files. Users can use GitHub Actions to build the latest source code into executable files at any time!</p>
 <p>⭐ For the automatic building executable files tutorial, please refer to the <code>Build of Executable File Guide</code> section of this document. If you need a more detailed step-by-step tutorial with illustrations, please <a href="https://mp.weixin.qq.com/s/TorfoZKkf4-x8IBNLImNuw">check out this article</a>!</p>
-<p><strong>Note: Due to the macOS platform's executable file <code>main</code> not being code-signed, it will be restricted by system security measures on first run. Please execute the command <code>xattr -cr main.app</code> in the terminal to remove the security flag, after which it can run normally.</strong></p>
+<p><strong>Note: Due to the macOS platform's executable file <code>main</code> not being code-signed, it will be restricted by system security measures on first run. Please execute the command <code>xattr -cr project_folder_path</code> in the terminal to remove the security flag, after which it can run normally.</strong></p>
 <hr>
 <ol>
-<li><b>Run the executable file</b> or <b>configure the environment to run</b>(choose one of the two)
+<li><b>Run the executable file</b> or <b>configure the environment to run</b> (choose one of the two)
 <ol><b>Run the executable file</b>
 <li>Download the executable file compressed file built by <a href="https://github.com/JoeanAmier/TikTokDownloader/releases/latest">Releases</a> or Actions.</li>
 <li>After extracting, open the program folder and double-click to run <code>main</code>.</li>
@@ -142,12 +142,19 @@ demo()
 <ol><b>Configure the environment to run</b>
 
 [//]: # (<li>Install Python interpreter version not lower than <code>3.12</code></li>)
-<li>Install Python interpreter version <code>3.12</code></li>
-<li>Download the latest source code or the source code published on <a href="https://github.com/JoeanAmier/TikTokDownloader/releases/latest">Releases</a> to your local machine.</li>
-<li>Run the command <code>python -m venv venv</code> to create a virtual environment (optional).</li>
-<li>Run the command <code>.\venv\Scripts\activate.ps1</code> or <code>venv\Scripts\activate</code> to activate the virtual environment (optional).</li>
-<li>Run the command <code>pip install -r requirements.txt</code> to install the required modules for the program.</li>
-<li>Run the command <code>python .\main.py</code> or <code>python main.py</code> to start DouK-Downloader.</li>
+<li>Install the <a href="https://www.python.org/">Python</a> interpreter version <code>3.12</code></li>
+<li>Download the latest source code or the source code released in <a href="https://github.com/JoeanAmier/TikTokDownloader/releases/latest">Releases</a> to your local machine</li>
+<ol><b>Install project dependencies using pip</b>
+<li>Run the command <code>python -m venv venv</code> to create a virtual environment (optional)</li>
+<li>Run the command <code>.\venv\Scripts\activate.ps1</code> or <code>venv\Scripts\activate</code> to activate the virtual environment (optional)</li>
+<li>Run the command <code>pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt</code> to install the required modules for the program</li>
+<li>Run the command <code>python .\main.py</code> or <code>python main.py</code> to start DouK-Downloader</li>
+</ol>
+<ol><b>Install project dependencies using uv (recommended)</b>
+<li>Run the command <code>uv venv</code> to create a virtual environment</li>
+<li>Run the command <code>uv sync</code> to synchronize environment dependencies</li>
+<li>Run the command <code>uv run main.py</code> to start DouK-Downloader</li>
+</ol>
 </ol>
 </li>
 <li>Read the disclaimer of DouK-Downloader and enter content according to the prompt.</li>
