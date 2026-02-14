@@ -50,6 +50,7 @@ from ..module import DetailTikTokExtractor, DetailTikTokUnofficial
 from ..storage import RecordManager
 from ..tools import DownloaderError, choose, safe_pop
 from ..translation import _
+from ..databank import DataBank, DataBankExporter
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
@@ -120,7 +121,10 @@ class TikTok:
             parameter,
             server_mode,
         )
-        self.extractor = Extractor(parameter)
+        self._databank = None
+        self._databank_exporter = None
+        self._init_databank(parameter)
+        self.extractor = Extractor(parameter, self._databank)
         self.storage = bool(parameter.storage_format)
         self.record = RecordManager()
         self.settings = parameter.settings
@@ -201,10 +205,17 @@ class TikTok:
                 _("获取直播拉流地址(TikTok)"),
                 self.live_interactive_tiktok,
             ),
-            # (_("采集作品评论数据(TikTok)"), self.comment_interactive_tiktok,),
             (
                 _("批量下载视频原画(TikTok)"),
                 self.detail_interactive_tiktok_unofficial,
+            ),
+            (
+                _("数据中心统计(Data Bank)"),
+                self.databank_statistics,
+            ),
+            (
+                _("导出数据到 Excel(Data Bank)"),
+                self.databank_export_interactive,
             ),
         )
         self.__function_account = (
@@ -2314,3 +2325,145 @@ class TikTok:
                 break
             if n in range(len(self.__function)):
                 await self.__function[n][1](safe_pop(self.run_command))
+
+    # ========================================================================
+    # DataBank methods
+    # ========================================================================
+
+    def _init_databank(self, parameter: "Parameter"):
+        """Initialize the DataBank if enabled in settings."""
+        settings_data = parameter.settings.read() if hasattr(parameter.settings, 'read') else {}
+        if not settings_data.get("databank_enabled", False):
+            return
+        dsn = settings_data.get(
+            "databank_dsn",
+            "postgresql://postgres:postgres@localhost:5444/tiktok_databank",
+        )
+        self._databank = DataBank(dsn)
+        self._databank_exporter = DataBankExporter(self._databank)
+
+    async def _ensure_databank_ready(self) -> bool:
+        """Ensure DataBank is initialized (lazy init on first async access)."""
+        if not self._databank:
+            return False
+        if not self._databank.pool:
+            result = await self._databank.initialize()
+            if not result:
+                self.console.warning(
+                    _(
+                        "Data Bank 连接失败，请检查 PostgreSQL 是否正在运行！"
+                    )
+                )
+                return False
+        return self._databank.is_available
+
+    async def databank_statistics(self, *args):
+        """Display Data Bank statistics."""
+        if not await self._ensure_databank_ready():
+            self.console.warning(
+                _(
+                    "Data Bank 未启用或未连接，请在 settings.json 中设置 "
+                    "databank_enabled 为 true 并确保 PostgreSQL 正在运行！"
+                )
+            )
+            return
+        stats = await self._databank.get_statistics()
+        if not stats:
+            self.console.info(_("Data Bank 为空，暂无数据。"))
+            return
+
+        table_names = {
+            "contents": _("视频/图集"),
+            "comments": _("评论"),
+            "users": _("用户"),
+            "search_users": _("搜索用户"),
+            "search_lives": _("搜索直播"),
+            "hot_trends": _("热榜"),
+        }
+        self.console.print()
+        self.console.print(
+            "╔══════════════════════════════════════════╗",
+            style="bold cyan",
+        )
+        self.console.print(
+            "║       📊 Data Bank Statistics            ║",
+            style="bold cyan",
+        )
+        self.console.print(
+            "╠══════════════════════════════════════════╣",
+            style="bold cyan",
+        )
+        total = 0
+        for table, count in stats.items():
+            name = table_names.get(table, table)
+            self.console.print(
+                f"║  {name:<20s}  {count:>10,d} 条   ║",
+                style="cyan",
+            )
+            total += count
+        self.console.print(
+            "╠══════════════════════════════════════════╣",
+            style="bold cyan",
+        )
+        self.console.print(
+            f"║  {'总计':<20s}  {total:>10,d} 条   ║",
+            style="bold green",
+        )
+        self.console.print(
+            "╚══════════════════════════════════════════╝",
+            style="bold cyan",
+        )
+        self.console.print()
+
+    async def databank_export_interactive(self, *args):
+        """Interactive export from Data Bank to Excel."""
+        if not await self._ensure_databank_ready():
+            self.console.warning(
+                _(
+                    "Data Bank 未启用或未连接，请在 settings.json 中设置 "
+                    "databank_enabled 为 true 并确保 PostgreSQL 正在运行！"
+                )
+            )
+            return
+
+        export_options = (
+            (_("导出所有数据"), "all"),
+            (_("仅导出视频/图集"), "contents"),
+            (_("仅导出评论"), "comments"),
+            (_("仅导出用户"), "users"),
+            (_("仅导出搜索用户"), "search_users"),
+            (_("仅导出搜索直播"), "search_lives"),
+            (_("仅导出热榜"), "hot_trends"),
+        )
+
+        select = choose(
+            _("请选择导出类型"),
+            [i[0] for i in export_options],
+            self.console,
+        )
+
+        try:
+            n = int(select) - 1
+        except ValueError:
+            return
+
+        if n not in range(len(export_options)):
+            return
+
+        _, export_type = export_options[n]
+
+        filename = DataBankExporter.generate_filename()
+        output_path = self.parameter.root.joinpath(filename)
+
+        if export_type == "all":
+            result = await self._databank_exporter.export_all(output_path)
+        else:
+            result = await self._databank_exporter.export_by_type(
+                export_type, output_path
+            )
+
+        if result:
+            self.console.info(
+                _("数据已成功导出到: {path}").format(path=result),
+            )
+        self.logger.info(_("已退出数据导出模式"))

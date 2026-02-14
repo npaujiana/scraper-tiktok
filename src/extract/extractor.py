@@ -73,10 +73,11 @@ class Extractor:
         "mix_title": "mix_info.mix_name",
     }
 
-    def __init__(self, params: "Parameter"):
+    def __init__(self, params: "Parameter", databank=None):
         self.log = params.logger
         self.date_format = params.date_format
         self.cleaner = params.CLEANER
+        self.databank = databank
         self.type = {
             "batch": self.__batch,
             "detail": self.__detail,
@@ -195,7 +196,7 @@ class Extractor:
             self.detail_necessary_keys,
         )
         self.__extract_item_records(container.all_data)
-        await self.__record_data(recorder, container.all_data)
+        await self.__record_data(recorder, container.all_data, "detail")
         self.__date_filter(container)
         self.__condition_filter(container)
         self.__summary_detail(container.all_data)
@@ -1012,7 +1013,7 @@ class Extractor:
             container.all_data, self.detail_necessary_keys
         )
         self.__extract_item_records(container.all_data)
-        await self.__record_data(recorder, container.all_data)
+        await self.__record_data(recorder, container.all_data, "detail")
         self.__condition_filter(container)
         return container.all_data
 
@@ -1043,7 +1044,7 @@ class Extractor:
             container.all_data = self.__clean_extract_data(
                 container.all_data, self.comment_necessary_keys
             )
-            await self.__record_data(recorder, container.all_data)
+            await self.__record_data(recorder, container.all_data, "comment")
         return container.all_data
 
     def __extract_comments_data(
@@ -1195,7 +1196,7 @@ class Extractor:
         container.all_data = self.__clean_extract_data(
             container.all_data, self.user_necessary_keys
         )
-        await self.__record_data(recorder, container.all_data)
+        await self.__record_data(recorder, container.all_data, "user")
         return container.all_data
 
     def __extract_user_data(
@@ -1283,7 +1284,7 @@ class Extractor:
             self.__search_result_classify(container, self.generate_data_object(i))
             for i in data
         ]
-        await self.__record_data(recorder, container.all_data)
+        await self.__record_data(recorder, container.all_data, "search_general")
         return container.all_data
 
     def __search_result_classify(
@@ -1326,7 +1327,7 @@ class Extractor:
             )
             for i in data
         ]
-        await self.__record_data(recorder, container.all_data)
+        await self.__record_data(recorder, container.all_data, "search_user")
         return container.all_data
 
     def __deal_search_user_live(
@@ -1375,7 +1376,7 @@ class Extractor:
             },
         )
         [self.__deal_search_live(container, self.generate_data_object(i)) for i in data]
-        await self.__record_data(recorder, container.all_data)
+        await self.__record_data(recorder, container.all_data, "search_live")
         return container.all_data
 
     def __deal_search_live(
@@ -1398,7 +1399,7 @@ class Extractor:
     ) -> list[dict]:
         all_data = []
         [self.__deal_hot_data(all_data, self.generate_data_object(i)) for i in data]
-        await self.__record_data(recorder, all_data)
+        await self.__record_data(recorder, all_data, "hot")
         return all_data
 
     def __deal_hot_data(self, container: list, data: SimpleNamespace):
@@ -1416,10 +1417,38 @@ class Extractor:
         }
         container.append(cache)
 
-    async def __record_data(self, record, data: list[dict]):
+    async def __record_data(self, record, data: list[dict], databank_type: str = "detail"):
         # 记录数据
         for i in data:
             await record.save(self.__extract_values(record, i))
+        # Save to DataBank if available (lazy init on first use)
+        if self.databank:
+            if not self.databank.pool:
+                await self.databank.initialize()
+            if self.databank.is_available:
+                await self._save_to_databank(data, databank_type)
+
+    async def _save_to_databank(self, data: list[dict], type_: str = "detail"):
+        """Save extracted data to the centralized DataBank."""
+        if not self.databank or not self.databank.is_available:
+            return
+        from ..databank.models import TABLE_CONFIGS
+        config = TABLE_CONFIGS.get(type_)
+        if not config:
+            return
+        fields = config["fields"]
+        for item in data:
+            values = []
+            for field in fields:
+                val = item.get(field, "")
+                # Convert lists to comma-separated strings
+                if isinstance(val, list):
+                    val = ", ".join(str(v) for v in val)
+                values.append(val)
+            try:
+                await self.databank.save(values, type_)
+            except Exception as e:
+                self.log.warning(f"DataBank save failed: {e}")
 
     @staticmethod
     def __extract_values(record, data: dict) -> list:

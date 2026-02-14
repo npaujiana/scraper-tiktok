@@ -90,6 +90,8 @@ class Settings:
         "live_qualities": "",
         "douyin_platform": True,
         "tiktok_platform": True,
+        "databank_enabled": False,
+        "databank_dsn": "postgresql://postgres:postgres@localhost:5444/tiktok_databank",
         "browser_info": {
             "User-Agent": USERAGENT,
             "pc_libra_divert": "Windows",
